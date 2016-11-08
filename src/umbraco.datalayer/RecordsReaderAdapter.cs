@@ -19,12 +19,14 @@ namespace umbraco.DataLayer
     /// </summary>
     /// <typeparam name="D">The data reader class</typeparam>
     public abstract class RecordsReaderAdapter<D> : IRecordsReader
-                                            where D : IDataReader, IDataRecord, IEnumerable
+                                            where D : class, IDataReader, IDataRecord, IEnumerable
     {
         #region Private Fields
 
         /// <summary> Wrapped data reader. </summary>
-        private readonly D m_DataReader;
+        private D m_DataReader;
+
+        private bool _disposed;
 
         /* Use the DebugDataLayer compile constant to get information about the opened RecordsReaderAdapters. */
         #if DEBUG && DebugDataLayer
@@ -98,6 +100,7 @@ namespace umbraco.DataLayer
         {
             Dispose(false);
         }
+
         #endregion
 
         #region IRecordsReader Members
@@ -109,9 +112,16 @@ namespace umbraco.DataLayer
         {
             try
             {
+                // kill it now! most of Umbraco's code does not use the 'using' pattern
+                // and relies on finalization to dispose the adapter, but in most places
+                // we do close the adapter, so this should help
                 m_DataReader.Close();
+                m_DataReader.Dispose();
+                m_DataReader = null;
+                _disposed = true;
+                GC.SuppressFinalize(this);
             }
-            catch { }
+            catch { } // oh my
 
             #if DEBUG && DebugDataLayer
                 // Log closing
@@ -416,6 +426,11 @@ namespace umbraco.DataLayer
         ///                         <c>false</c> to release only unmanaged resources.</param>
         protected virtual void Dispose(bool disposing)
         {
+            if (_disposed) return;
+            _disposed = true;
+
+            // rest of the method is not pretty but ... bah
+
             // Try to close the data reader if it's still open
             try
             {
